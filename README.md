@@ -12,19 +12,6 @@ The repository contains several types of engineering specifications and accelera
 - **Workflows** — orchestrated, multi‑step sequences that coordinate agents, skills, and plugins across the SDLC  
 - **Plugins** — executable or integrative extensions (tools, MCP servers, APIs, actions) that allow agents and workflows to act on real systems  
 
-### How these fit together
-
-- **Principles and POVs** provide strategic direction  
-- **Laws** define enforceable constraints  
-- **ADRs** explain *why* decisions were made  
-- **Adoptions** provide the concrete “golden path”  
-- **Skills** operationalize adoptions into reusable behaviors  
-- **Agents** bundle skills into purpose‑built engineering roles  
-- **Workflows** orchestrate agents and skills into repeatable SDLC flows  
-- **Plugins** provide the execution layer across tools and platforms  
-
-> **Intent → Constraint → Decision → Playbook → Skill → Agent → Workflow → Execution**
-
 ---
 
 ## Practice Guides
