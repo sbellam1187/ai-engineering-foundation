@@ -1,23 +1,3 @@
-# AA Engineering Foundation
-**The Community‑Driven Engineering Foundation Repository for American Airlines**
-
-**AA Engineering Foundation** is a **community‑driven engineering standards, contracts, and execution repository for American Airlines designed to enable agentic SDLC acceleration**.
-
-It serves as our shared architecture and engineering strategies, specs, and accelerators—capturing principles, points of view, laws, architecture decisions, adoption playbooks, **agent skills, agents, workflows, and plugins**—to improve **delivery speed**, **quality**, **consistency**, and **operational reliability**, while lowering the barrier for teams to adopt proven, enterprise‑aligned standards.
-
-The scope of this repo encompasses **enterprise architecture, platforms, runtimes, domains, and cross‑cutting concerns**.
-
-This repository is intentionally designed to be:
-
-- **Human‑readable** — clear guidance engineers can apply quickly  
-- **Machine‑ and agent‑queryable** — consistent taxonomy, naming, and frontmatter  
-- **Automatable** — laws, adoptions, skills, agents, and workflows are written to be enforced or executed via CI/CD, agents, policy‑as‑code, or runtime controls  
-
-This is not a centrally dictated rulebook.  
-It is a **community‑driven engineering foundation**, built *with* engineers across verticals, platforms, and domains.
-
----
-
 ## What’s in this repo?
 
 The repository contains several types of engineering specifications and accelerators:
