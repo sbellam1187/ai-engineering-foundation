@@ -1,0 +1,224 @@
+# Derived from aa-ct-loyalty-reusable-workflows
+# Dependabot Fix Automation — Reusable Workflow
+# Hosted in: AAInternal/aa-ct-loyalty-reusable-workflows
+# Called by consumer repos
+
+name: Dependabot Fix Automation (Reusable)
+
+on:
+  workflow_call:
+    inputs:
+      severity_filter:
+        description: 'Severity filter (high, critical, or both)'
+        required: false
+        default: 'high,critical'
+        type: string
+      dry_run:
+        description: 'Dry run - only list alerts without creating issues'
+        required: false
+        default: false
+        type: boolean
+      pr_reviewers:
+        description: 'Comma-separated GitHub usernames to add as PR reviewers'
+        required: false
+        default: ''
+        type: string
+    secrets:
+      SECURITY_PAT:
+        required: false
+
+permissions:
+  contents: read
+  issues: write
+  security-events: read
+
+env:
+  PR_REVIEWERS: ${{ inputs.pr_reviewers }}
+  SEVERITY_FILTER: ${{ inputs.severity_filter }}
+
+jobs:
+  process-security-alerts:
+    runs-on: ubuntu-latest
+    outputs:
+      issue_numbers: ${{ steps.create-issues.outputs.issue_numbers }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Get open Dependabot alerts
+        id: get-alerts
+        env:
+          GH_TOKEN: ${{ secrets.SECURITY_PAT || secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Fetching Dependabot security alerts..."
+
+          # Fetch open alerts with high/critical severity
+          alerts=$(gh api "repos/${{ github.repository }}/dependabot/alerts?state=open&severity=high,critical&per_page=100" \
+            --paginate \
+            --jq '[.[] | select(.security_vulnerability.severity == "high" or .security_vulnerability.severity == "critical")]') || {
+            echo "::error::Failed to fetch Dependabot alerts. Ensure SECURITY_PAT secret is configured with 'security_events' scope."
+            exit 1
+          }
+
+          # Count alerts
+          alert_count=$(echo "$alerts" | jq 'length')
+          echo "Found $alert_count open HIGH/CRITICAL alerts"
+
+          # Save alerts to file for processing
+          echo "$alerts" > alerts.json
+          echo "alert_count=$alert_count" >> $GITHUB_OUTPUT
+
+      - name: Check for existing issues
+        id: check-issues
+        env:
+          GH_TOKEN: ${{ secrets.SECURITY_PAT || secrets.GITHUB_TOKEN }}
+        run: |
+          # Get list of existing security fix issues to avoid duplicates
+          existing_issues=$(gh issue list \
+            --label "copilot-security-fix" \
+            --state open \
+            --json title \
+            --jq '.[].title')
+
+          echo "$existing_issues" > existing_issues.txt
+          echo "Existing security fix issues:"
+          cat existing_issues.txt
+
+      - name: Create issues for Copilot
+        id: create-issues
+        if: steps.get-alerts.outputs.alert_count != '0' && inputs.dry_run != true
+        env:
+          GH_TOKEN: ${{ secrets.SECURITY_PAT || secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          echo "Processing alerts and creating issues..."
+
+          # Initialize counters
+          issue_numbers=""
+          created_count=0
+          skipped_count=0
+          failed_count=0
+
+          # Get total number of alerts
+          total_alerts=$(jq 'length' alerts.json)
+          echo "Total alerts to process: $total_alerts"
+
+          # Process each alert using index-based loop (more reliable than piping to while)
+          for ((i=0; i<total_alerts; i++)); do
+            echo "----------------------------------------"
+            echo "Processing alert $((i+1)) of $total_alerts"
+
+            alert=$(jq -c ".[$i]" alerts.json)
+            # Extract alert details
+            alert_number=$(echo "$alert" | jq -r '.number')
+            package_name=$(echo "$alert" | jq -r '.security_vulnerability.package.name')
+            severity=$(echo "$alert" | jq -r '.security_vulnerability.severity')
+            vulnerable_version=$(echo "$alert" | jq -r '.security_vulnerability.vulnerable_version_range')
+            patched_version=$(echo "$alert" | jq -r '.security_vulnerability.first_patched_version.identifier // "latest"')
+            cve_id=$(echo "$alert" | jq -r '.security_advisory.cve_id // "N/A"')
+            advisory_summary=$(echo "$alert" | jq -r '.security_advisory.summary')
+            advisory_url=$(echo "$alert" | jq -r '.html_url')
+            severity_upper=$(echo "$severity" | tr '[:lower:]' '[:upper:]')
+
+            echo "  Alert #$alert_number: $package_name ($cve_id) - $severity_upper"
+
+            # Create issue title
+            issue_title="[Security] Fix ${severity_upper} vulnerability in ${package_name} (${cve_id})"
+
+            # Check if issue already exists (use exact line match to avoid partial matches)
+            if grep -Fxq "$issue_title" existing_issues.txt 2>/dev/null; then
+              echo "  SKIPPED: Issue already exists for: $package_name"
+              skipped_count=$((skipped_count + 1))
+              continue
+            fi
+
+            echo "  Creating issue: $issue_title"
+
+            # Create detailed issue body with instructions for Copilot using heredoc
+            cat > issue_body.md << ISSUE_EOF
+          ## Security Vulnerability Fix Request
+
+          **Alert Number:** #${alert_number}
+          **Package:** ${package_name}
+          **Severity:** ${severity_upper}
+          **CVE:** ${cve_id}
+          **Vulnerable Versions:** ${vulnerable_version}
+          **Patched Version:** ${patched_version}
+
+          ### Description
+          ${advisory_summary}
+
+          ### Dependabot Alert
+          ${advisory_url}
+          ---
+          This issue was automatically created by the Copilot Security Fix workflow.
+          @security-fix Please fix this security vulnerability by updating the dependency version in build.gradle and ensuring all tests pass.
+          ISSUE_EOF
+
+            # Ensure labels exist
+            gh label create "copilot-security-fix" --description "Issues for Copilot to fix security vulnerabilities" --color "d73a49" 2>/dev/null || true
+            gh label create "security" --description "Security related issues" --color "ee0701" 2>/dev/null || true
+            gh label create "automated" --description "Automatically generated" --color "0e8a16" 2>/dev/null || true
+            gh label create "dependencies" --description "Dependency updates" --color "0366d6" 2>/dev/null || true
+            gh label create "no-action-required" --description "No code changes needed" --color "c5def5" 2>/dev/null || true
+            gh label create "false-positive" --description "Scanner false positive" --color "fef2c0" 2>/dev/null || true
+            gh label create "manual-review-needed" --description "Requires manual review" --color "d4c5f9" 2>/dev/null || true
+
+            # Create the issue
+            if issue_url=$(gh issue create \
+              --title "$issue_title" \
+              --body-file issue_body.md \
+              --assignee "@copilot" \
+              --label "copilot-security-fix,security,dependencies,automated" 2>&1); then
+
+              echo "  SUCCESS: Created issue: $issue_url"
+
+              # Extract issue number from URL
+              issue_number=$(echo "$issue_url" | grep -oE '[0-9]+$')
+              echo "  Issue #${issue_number} created successfully."
+              created_count=$((created_count + 1))
+            else
+              echo "  FAILED: Could not create issue for $package_name"
+              echo "  Error: $issue_url"
+              failed_count=$((failed_count + 1))
+            fi
+
+            # Small delay to avoid rate limiting
+            sleep 3
+          done
+
+          echo "========================================"
+          echo "SUMMARY:"
+          echo "  Total alerts: $total_alerts"
+          echo "  Issues created: $created_count"
+          echo "  Issues skipped (already exist): $skipped_count"
+          echo "  Issues failed: $failed_count"
+          echo "========================================"
+
+          if [ $failed_count -gt 0 ]; then
+            echo "::warning::$failed_count issue(s) failed to create"
+          fi
+
+          # Output issue numbers for next job
+          if [ -f created_issues.txt ]; then
+            issue_numbers=$(cat created_issues.txt | tr '\n' ',' | sed 's/,$//')
+            echo "issue_numbers=$issue_numbers" >> $GITHUB_OUTPUT
+            echo "Created issues: $issue_numbers"
+          fi
+
+      - name: Dry run - list alerts
+        if: inputs.dry_run == true
+        run: |
+          echo "=== DRY RUN MODE ==="
+          echo "The following issues would be created:"
+          echo ""
+          cat alerts.json | jq -r '.[] | "- [\(.security_vulnerability.severity | ascii_upcase)] \(.security_vulnerability.package.name): \(.security_advisory.summary) (CVE: \(.security_advisory.cve_id // "N/A"))"'
+
+      - name: Summary
+        run: |
+          echo "## Security Fix Automation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Alerts Found:** ${{ steps.get-alerts.outputs.alert_count }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Severity Filter:** ${{ inputs.severity_filter }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Dry Run:** ${{ inputs.dry_run }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY

@@ -1,0 +1,33 @@
+# Derived from aa-ct-loyalty-upgrades-utility-service
+# Dependabot Fix Automation — Trigger
+# Delegates all logic to the reusable workflow
+# To use in another repo, copy this file and adjust the schedule/inputs as needed.
+
+name: Dependabot Fix Automation
+
+on:
+  # Run daily at 7 AM CST
+  schedule:
+    - cron: '0 13 * * *'
+
+  # Allow manual trigger from Actions tab
+  workflow_dispatch:
+    inputs:
+      severity_filter:
+        description: 'Severity filter (high, critical, or both)'
+        required: false
+        default: 'high,critical'
+      dry_run:
+        description: 'Dry run - only list alerts without creating issues'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  security-fix:
+    uses: ./workflow-security-0004-dependabot-fix.yml@main
+    with:
+      severity_filter: ${{ inputs.severity_filter || 'high,critical' }}
+      dry_run: ${{ inputs.dry_run || false }}
+    secrets:
+      SECURITY_PAT: ${{ secrets.SECURITY_PAT }}

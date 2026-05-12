@@ -1,0 +1,160 @@
+# Mezmo Reusable View Definitions
+#
+# Generic view templates for microservice log monitoring.
+# Replace ${APP_NAME} with your service's app label before applying.
+#
+# Apply all views:
+#   APP_NAME=my-service envsubst < mezmo-views.yaml | mzm create -f -
+
+---
+apiVersion: views.mezmo.com/v1
+kind: View
+metadata:
+  name: ${APP_NAME}-production-errors
+spec:
+  query: "level:error AND app:${APP_NAME} AND env:production"
+  description: "All production errors"
+  timeRange: "1h"
+  category: "Service Monitoring"
+
+---
+apiVersion: views.mezmo.com/v1
+kind: View
+metadata:
+  name: ${APP_NAME}-critical-errors
+spec:
+  query: "(level:error OR level:fatal) AND app:${APP_NAME} AND env:production AND (status:[500 TO 599] OR message:*Exception* OR message:*Error*)"
+  description: "Critical errors — 5xx status codes and Java exceptions"
+  timeRange: "1h"
+  category: "Service Monitoring"
+
+---
+apiVersion: views.mezmo.com/v1
+kind: View
+metadata:
+  name: ${APP_NAME}-timeout-errors
+spec:
+  query: "app:${APP_NAME} AND (message:*timeout* OR message:*timed out* OR message:*TimeoutException*)"
+  description: "Timeout-related errors and warnings"
+  timeRange: "2h"
+  category: "Service Monitoring"
+
+---
+apiVersion: views.mezmo.com/v1
+kind: View
+metadata:
+  name: ${APP_NAME}-database-errors
+spec:
+  query: "level:error AND app:${APP_NAME} AND (message:*database* OR message:*SQL* OR message:*connection pool* OR message:*connection refused*)"
+  description: "Database and connectivity errors"
+  timeRange: "1h"
+  category: "Service Monitoring"
+
+---
+apiVersion: views.mezmo.com/v1
+kind: View
+metadata:
+  name: ${APP_NAME}-validation-errors
+spec:
+  query: "app:${APP_NAME} AND (message:*validation* OR message:*invalid* OR status:400)"
+  description: "Input validation and bad request errors"
+  timeRange: "30m"
+  category: "Service Monitoring"
+
+---
+apiVersion: views.mezmo.com/v1
+kind: View
+metadata:
+  name: ${APP_NAME}-auth-errors
+spec:
+  query: "app:${APP_NAME} AND (status:401 OR status:403 OR message:*authentication* OR message:*authorization* OR message:*unauthorized*)"
+  description: "Authentication and authorization failures"
+  timeRange: "1h"
+  category: "Service Monitoring"
+
+---
+apiVersion: views.mezmo.com/v1
+kind: View
+metadata:
+  name: ${APP_NAME}-performance-issues
+spec:
+  query: "app:${APP_NAME} AND (message:*slow* OR message:*OutOfMemoryError* OR response_time:[5000 TO *])"
+  description: "Performance degradation and slow requests"
+  timeRange: "1h"
+  category: "Service Monitoring"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AA Loyalty Cross-Service Distributed Tracing Views
+#
+# Pre-built views for the known AA Loyalty platform microservices.
+# These support cross-service incident triage without per-service filtering.
+#
+# Apply only loyalty views:
+#   mzm create -f mezmo-views.yaml
+# ─────────────────────────────────────────────────────────────────────────────
+
+---
+apiVersion: views.mezmo.com/v1
+kind: View
+metadata:
+  name: loyalty-promotions-errors-spa
+spec:
+  query: "app:loyalty-engage-spa AND (message:*fetchPromotionData*failed* OR message:*AxiosError* OR message:*status code 500*)"
+  description: "Promotion fetch failures in the SPA frontend — AxiosError 500s from fetchPromotionData"
+  timeRange: "1h"
+  category: "AA Loyalty - Distributed Tracing"
+
+---
+apiVersion: views.mezmo.com/v1
+kind: View
+metadata:
+  name: loyalty-promotions-errors-backend
+spec:
+  query: "(app:aa-ct-loyalty-promotion-list-service OR app:loyalty-engage-promotions-mfe) AND level:error"
+  description: "Errors in the promotion list backend service and promotions MFE"
+  timeRange: "1h"
+  category: "AA Loyalty - Distributed Tracing"
+
+---
+apiVersion: views.mezmo.com/v1
+kind: View
+metadata:
+  name: loyalty-ventana-timeouts
+spec:
+  query: "(app:aa-ct-loyalty-promotion-list-service OR app:aa-ct-loyalty-membenefits-entitlements) AND (message:*timeout* OR message:*timed out* OR message:*Ventana* OR message:*TimeoutException*)"
+  description: "Ventana downstream dependency timeouts across promotion and entitlement services"
+  timeRange: "2h"
+  category: "AA Loyalty - Distributed Tracing"
+
+---
+apiVersion: views.mezmo.com/v1
+kind: View
+metadata:
+  name: loyalty-entitlements-errors
+spec:
+  query: "app:aa-ct-loyalty-membenefits-entitlements AND level:error"
+  description: "All errors in the member benefits entitlements service"
+  timeRange: "1h"
+  category: "AA Loyalty - Distributed Tracing"
+
+---
+apiVersion: views.mezmo.com/v1
+kind: View
+metadata:
+  name: loyalty-all-services-errors
+spec:
+  query: "(app:loyalty-engage-spa OR app:loyalty-engage-promotions-mfe OR app:aa-ct-loyalty-promotion-list-service OR app:aa-ct-loyalty-membenefits-entitlements) AND level:error"
+  description: "All errors across all known AA Loyalty microservices — use for cross-service incident triage"
+  timeRange: "30m"
+  category: "AA Loyalty - Distributed Tracing"
+
+---
+apiVersion: views.mezmo.com/v1
+kind: View
+metadata:
+  name: loyalty-5xx-all-services
+spec:
+  query: "(app:loyalty-engage-spa OR app:loyalty-engage-promotions-mfe OR app:aa-ct-loyalty-promotion-list-service OR app:aa-ct-loyalty-membenefits-entitlements) AND (status:[500 TO 599] OR message:*status code 5*)"
+  description: "5xx HTTP errors across all AA Loyalty services"
+  timeRange: "1h"
+  category: "AA Loyalty - Distributed Tracing"

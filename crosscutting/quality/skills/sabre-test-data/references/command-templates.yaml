@@ -1,0 +1,203 @@
+# Sabre Command Templates — single source of truth for all command sequences.
+# PLACEHOLDER FORMAT: Use {PARAM_NAME} — replace with actual values before execution.
+
+defaults:
+  booking:
+    COUNT_OF_PASSENGERS: "1"
+    BOOKING_CLASS: "Y"
+    SEGMENT_LINE_NUMBER: "1"
+    CARRIER: "AA"
+
+templates:
+
+  create_pnr:
+    description: "Create a new PNR with flight, passenger, AAdvantage, passport, and phone"
+    required_params: [DEP_DATE, ORIGIN, DEST, LAST_NAME, FIRST_NAME, COUNTRY, PASSPORT_NUM, DOB, GENDER, EXP_DATE]
+    optional_params:
+      AA_NUMBER:
+        default: "A080830"
+    commands:
+      - "1{DEP_DATE}{ORIGIN}{DEST}"
+      - "0{COUNT_OF_PASSENGERS}{BOOKING_CLASS}{SEGMENT_LINE_NUMBER}"
+      - "-{LAST_NAME}/{FIRST_NAME}"
+      - "FFAA{AA_NUMBER}-1.1"
+      - "4DOCS/P/{COUNTRY}/{PASSPORT_NUM}/{COUNTRY}/{DOB}/{GENDER}/{EXP_DATE}/{LAST_NAME}/{FIRST_NAME}-1.1"
+      - "900-H"
+      - "7T-A/F"
+      - "6S"
+      - "ER"
+    notes: "Execute ALL 9 commands. Do not skip any."
+
+  create_roundtrip_pnr:
+    description: "Create a roundtrip PNR with two flight segments, passenger, AAdvantage, passport, and phone"
+    required_params: [DEP_DATE, ORIGIN, DEST, RET_DATE, LAST_NAME, FIRST_NAME, COUNTRY, PASSPORT_NUM, DOB, GENDER, EXP_DATE]
+    optional_params:
+      AA_NUMBER:
+        default: "A080830"
+    commands:
+      - "1{DEP_DATE}{ORIGIN}{DEST}"
+      - "0{COUNT_OF_PASSENGERS}{BOOKING_CLASS}{SEGMENT_LINE_NUMBER}"
+      - "1{RET_DATE}{DEST}{ORIGIN}"
+      - "0{COUNT_OF_PASSENGERS}{BOOKING_CLASS}{SEGMENT_LINE_NUMBER}"
+      - "-{LAST_NAME}/{FIRST_NAME}"
+      - "FFAA{AA_NUMBER}-1.1"
+      - "4DOCS/P/{COUNTRY}/{PASSPORT_NUM}/{COUNTRY}/{DOB}/{GENDER}/{EXP_DATE}/{LAST_NAME}/{FIRST_NAME}-1.1"
+      - "900-H"
+      - "7T-A/F"
+      - "6S"
+      - "ER"
+    notes: "Execute ALL 11 commands. Segments 1 and 2 use SEGMENT_LINE_NUMBER=1 (first line from each availability display)."
+
+  create_corporate_pnr:
+    description: "Create corporate PNR (single or multi-passenger)"
+    required_params: [COUNT_OF_PASSENGERS, CORP_TEAM_NAME, DEP_DATE, ORIGIN, DEST, PASSENGERS]
+    commands:
+      - "-C/{COUNT_OF_PASSENGERS}{CORP_TEAM_NAME}"
+      - "1{DEP_DATE}{ORIGIN}{DEST}"
+      - "0{COUNT_OF_PASSENGERS}{BOOKING_CLASS}{SEGMENT_LINE_NUMBER}"
+      - "{PASSENGER_NAME_COMMANDS}"
+      - "{PASSENGER_DOCS_COMMANDS}"
+      - "900-H"
+      - "7T-A/F"
+      - "6S"
+      - "ER"
+    notes: "Generate one name command and one 4DOCS command per traveler from PASSENGERS. For traveler index i (1-based), use name number -(i+1).1 in the DOCS suffix (first traveler is -2.1, second is -3.1, etc.). Corp PNR can't be associated with an aadvantage number."
+    expansion_rules:
+      PASSENGER_NAME_COMMANDS: "Expand to N commands from PASSENGERS: -{LAST_NAME}/{FIRST_NAME}"
+      PASSENGER_DOCS_COMMANDS: "Expand to N commands from PASSENGERS: 4DOCS/P/{COUNTRY}/{PASSPORT_NUM}/{COUNTRY}/{DOB}/{GENDER}/{EXP_DATE}/{LAST_NAME}/{FIRST_NAME}-{NAME_NUMBER} where NAME_NUMBER starts at 2.1 and increments per traveler"
+
+  retrieve_pnr:
+    description: "Retrieve and display an existing PNR"
+    required_params: [PNR]
+    commands:
+      - "*{PNR}"
+
+  cancel_pnr:
+    description: "Cancel an existing PNR"
+    required_params: [PNR]
+    commands:
+      - "*{PNR}"
+      - "XI"
+      - "ER"
+
+  ticket_pnr:
+    description: "Issue ticket for an existing PNR"
+    required_params: [PNR]
+    commands:
+      - "SI 5"
+      - "AAAXTM"
+      - "W*2A*ETKT*45105664"
+      - "*{PNR}"
+      - "WP"
+      - "PQ"
+      - "W'FCA"
+      - "6S"
+      - "ER"
+    notes: "Execute ALL commands in order"
+
+  lookup_ticket_aadvantage:
+    description: "Lookup ticket by AAdvantage number"
+    required_params: [AADVANTAGE_NUMBER]
+    commands:
+      - "VCR*FFAA{AADVANTAGE_NUMBER}"
+
+  display_flight_availability:
+    description: "Display flight availability and schedule for a specific route and date"
+    required_params: [DATE, ORIGIN, DEST]
+    optional_params:
+      CARRIER:
+        default: "AA"
+    commands:
+      - "1{DATE}{ORIGIN}{DEST}'{CARRIER}"
+
+  display_flight_availability_via_connection:
+    description: "Display flight availability via specific connection city"
+    required_params: [DATE, ORIGIN, DEST, CONNECTION]
+    optional_params:
+      CARRIER:
+        default: "AA"
+    commands:
+      - "1{DATE}{ORIGIN}{DEST}5A{CONNECTION}'{CARRIER}"
+
+  checkin_passenger:
+    description: "Check in a passenger from PNR"
+    required_params: [PNR]
+    auto_extracted_params:
+      FLIGHT_NUMBER: "from PNR segment"
+      DEP_DATE: "from PNR segment"
+      ORIGIN: "from PNR segment"
+      LAST_NAME: "from PNR name field"
+    commands:
+      - "I"
+      - "*{PNR}"
+      - "AAA{ORIGIN}"
+      - "GAXX"
+      - "G-{FLIGHT_NUMBER}/{DEP_DATE}{ORIGIN}-{LAST_NAME}*BT/NOBAGS"
+    notes: "Parameters are auto-extracted from PNR if not provided"
+
+  display_pall:
+    description: "Display Priority All (PALL) list for a flight"
+    required_params: [FLIGHT_NUMBER, DATE, CITY]
+    commands:
+      - "G*L{FLIGHT_NUMBER}/{DATE}{CITY}/PALL"
+
+  display_pall_history:
+    description: "Display PALL history for a passenger"
+    required_params: [FLIGHT_NUMBER, DATE, CITY, LAST_NAME]
+    commands:
+      - "G*HN/{FLIGHT_NUMBER}/{DATE}{CITY}/{LAST_NAME}"
+
+  display_ssr:
+    description: "Display Special Service Requests"
+    required_params: [PNR]
+    commands:
+      - "*{PNR}"
+      - "*P4"
+
+  display_frequent_flyer:
+    description: "Display frequent flyer information"
+    required_params: [PNR]
+    commands:
+      - "*{PNR}"
+      - "*FF"
+
+  add_fqtu:
+    description: "Add FQTU SSR"
+    commands:
+      - "4FQTU1R.KK"
+
+  add_fqtz_ssr:
+    description: "Add FQTZ SSR with sponsor or companion"
+    required_params: [PNR, SEG_NUMBER, ORIGIN, CABIN, TYPE, DATE, TIME]
+    commands:
+      - "*{PNR}"
+      - "4FQTZ{SEG_NUMBER}/{ORIGIN}/{CABIN}/{TYPE}/{DATE}/{TIME}/R/C.{PNR}"
+    notes: "Use M.{PNR}-{NAME_NUMBER} instead of C.{PNR} for companion"
+
+  delete_ssr_single:
+    description: "Delete single SSR line"
+    required_params: [PNR, LINE_NUMBER]
+    commands:
+      - "*{PNR}"
+      - "4{LINE_NUMBER}¤"
+
+  delete_ssr_range:
+    description: "Delete range of SSR lines"
+    required_params: [PNR, START_LINE, END_LINE]
+    commands:
+      - "*{PNR}"
+      - "4{START_LINE}-{END_LINE}¤"
+
+  add_complementary_upgrade:
+    description: "Add complementary upgrade request for AA"
+    required_params: [PNR, SEGMENT_NUMBER]
+    commands:
+      - "*{PNR}"
+      - "WC{SEGMENT_NUMBER}R/UPG"
+      - "ER"
+
+  ignore_and_discard:
+    description: "Ignore and discard current transaction (error recovery)"
+    commands:
+      - "IGD"
+    notes: "Use when you see ‡FINISH OR IGNORE PNR error"

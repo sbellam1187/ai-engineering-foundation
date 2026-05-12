@@ -1,0 +1,22 @@
+# octo-sts trust policy: copilot-sonar-fix
+#
+# Grants ephemeral tokens to workflows in this repo for:
+#   - issues:write              (create / reopen / close issues, assign copilot-swe-agent)
+#   - contents:read             (read repo files, checkout)
+#   - metadata:read             (required — read repo metadata)
+#   - pull_requests:write       (comment on source PR + existing Copilot Sonar PRs)
+#
+# Used by:
+#   - .github/workflows/workflow-quality-0001-copilot-sonar-fix.yml
+#   Source: crosscutting/quality/workflows/workflow-quality-0001-copilot-sonar-fix.yml
+#
+# Docs: https://developer.aa.com/docs/default/component/octo-sts
+
+issuer: https://token.actions.githubusercontent.com
+subject_pattern: "repo:AAInternal/aa-engineering-foundation:.*"
+
+permissions:
+  issues: write
+  contents: read
+  metadata: read
+  pull_requests: write

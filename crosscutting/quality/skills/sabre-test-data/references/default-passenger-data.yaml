@@ -1,0 +1,53 @@
+# Default Passenger Data
+# ======================
+# Test passenger data for PNR creation when parameters are not provided.
+# The agent uses these values automatically for testing/automation.
+
+# Primary default passenger (used when no passenger info provided)
+default_passenger:
+  AA_NUMBER: "A080830"
+  FIRST_NAME: "GOLD"
+  LAST_NAME: "STATUG"
+  COUNTRY: "US"
+  PASSPORT_NUM: "1234567"
+  DOB: "09NOV91"
+  GENDER: "M"
+  EXP_DATE: "09NOV28"
+
+# Additional test passengers (for multi-passenger scenarios)
+test_passengers:
+  - AA_NUMBER: "A123456"
+    FIRST_NAME: "JOHN"
+    LAST_NAME: "SMITH"
+    COUNTRY: "US"
+    PASSPORT_NUM: "987654321"
+    DOB: "15JAN85"
+    GENDER: "M"
+    EXP_DATE: "15JAN30"
+  
+  - AA_NUMBER: "B234567"
+    FIRST_NAME: "SARAH"
+    LAST_NAME: "JOHNSON"
+    COUNTRY: "US"
+    PASSPORT_NUM: "123456789"
+    DOB: "20MAR90"
+    GENDER: "F"
+    EXP_DATE: "20MAR28"
+  
+  - AA_NUMBER: "C345678"
+    FIRST_NAME: "MICHAEL"
+    LAST_NAME: "WILLIAMS"
+    COUNTRY: "US"
+    PASSPORT_NUM: "456789123"
+    DOB: "10JUL88"
+    GENDER: "M"
+    EXP_DATE: "10JUL29"
+  
+  - AA_NUMBER: "D456789"
+    FIRST_NAME: "EMILY"
+    LAST_NAME: "BROWN"
+    COUNTRY: "US"
+    PASSPORT_NUM: "789123456"
+    DOB: "05DEC92"
+    GENDER: "F"
+    EXP_DATE: "05DEC30"

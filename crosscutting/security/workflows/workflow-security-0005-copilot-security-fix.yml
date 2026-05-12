@@ -1,0 +1,168 @@
+# Copilot Agent Security Fix Workflow
+# Artifact: workflow-security-0005-copilot-security-fix
+#
+# Pre-fetches Dependabot and Code Scanning alert details, creates GitHub Issues
+# with the data, and assigns them to the copilot-swe-agent bot.
+#
+# Features:
+#   - One issue per Dependabot alert → one PR per fix (clean rollback)
+#   - Parent BOM upgrade detection: if 2+ alerts share a parent (e.g. Spring Boot,
+#     Jackson BOM), creates one umbrella issue suggesting a parent version upgrade
+#   - Transitive dependency classification in each issue body
+#   - Deduplication: skips alerts that already have an open issue, open PR,
+#     or a recently closed issue (within 7 days) to avoid duplicate work
+#   - Auto-close issues after Copilot agent picks them up (2-min delay)
+#
+# The main logic lives in scripts/copilot-security/copilot-security-fix.sh (deployed path)
+# to avoid the 21,000-character expression limit in GitHub Actions.
+#
+# Authentication:
+#   Uses octo-sts ephemeral token for:
+#     - vulnerability_alerts:read (Dependabot alerts API)
+#     - issues:write, contents:read, pull_requests:read, security_events:read
+#   Uses DEPENDABOT_PAT for:
+#     - Copilot agent assignment via GraphQL (GITHUB_TOKEN cannot see copilot-swe-agent)
+#   If the token lacks vulnerability_alerts permission, logs HTTP status code and actionable guidance.
+#   Docs: https://developer.aa.com/docs/default/component/octo-sts
+#
+# Copilot Docs: https://docs.github.com/en/copilot/how-tos/use-copilot-agents/coding-agent/create-a-pr#assigning-an-issue-to-copilot
+#
+# Setup Guide: crosscutting/security/skills/references/ref-security-0003-copilot-security-fix-setup.md
+
+name: Copilot Security Fix Automation
+
+on:
+  # schedule:
+  #   - cron: '0 15 * * *'
+
+  workflow_dispatch:
+    inputs:
+      fix_type:
+        description: 'What to fix'
+        type: choice
+        required: true
+        options:
+          - all
+          - dependabot
+          - code-scanning
+        default: 'all'
+
+permissions:
+  contents: read               # Read repository contents (checkout)
+  id-token: write              # Required for octo-sts OIDC token exchange
+  security-events: read        # Read Code Scanning alerts via API
+  issues: write                # Create issues and close them after agent picks up
+  pull-requests: read          # Check for existing open PRs to avoid duplicates
+
+jobs:
+  # ── Job 1: Create issues and assign to Copilot (schedule / manual) ──
+  assign-to-copilot:
+    name: Create Fix Issue → Assign to Copilot
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938 # v4.3.0
+        with:
+          sparse-checkout: scripts
+          sparse-checkout-cone-mode: true
+
+      # Get ephemeral token via octo-sts for Dependabot alerts
+      # Dependabot alerts require vulnerability_alerts permission — gracefully skipped if unavailable
+      - name: Get ephemeral token via octo-sts
+        id: octo-sts
+        uses: octo-sts/action@615d088645880b32000c2fbd6ca04377d4df9142 # v1
+        with:
+          scope: ${{ github.repository }}
+          identity: copilot-security-fix
+          domain: octo-sts.cloud.aa.com
+
+      - name: Ensure required labels exist
+        env:
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+        run: |
+          for label in security dependencies code-scanning copilot-security-fix; do
+            gh label create "$label" --color "d73a4a" --description "Auto-created by security workflow" --force --repo "${{ github.repository }}" 2>/dev/null || true
+          done
+
+      - name: Create issues and assign to Copilot agent
+        shell: bash
+        env:
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          OCTO_STS_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          DEPENDABOT_PAT: ${{ secrets.DEPENDABOT_PAT }}
+          FIX_TYPE: ${{ github.event.inputs.fix_type || 'all' }}
+        run: |
+          chmod +x scripts/copilot-security/copilot-security-fix.sh
+          scripts/copilot-security/copilot-security-fix.sh
+
+  # ── Job 2: Auto-close issues after Copilot agent picks them up ──
+  close-security-issues:
+    name: Close Security Issues
+    needs: assign-to-copilot
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938 # v4.3.0
+        with:
+          sparse-checkout: scripts
+          sparse-checkout-cone-mode: true
+
+      - name: Get ephemeral token via octo-sts
+        id: octo-sts
+        uses: octo-sts/action@615d088645880b32000c2fbd6ca04377d4df9142 # v1
+        with:
+          scope: ${{ github.repository }}
+          identity: copilot-security-fix
+          domain: octo-sts.cloud.aa.com
+
+      - name: Wait for Copilot agent to pick up issues
+        run: |
+          echo "⏳ Waiting 2 minutes for Copilot agent to pick up assigned issues..."
+          sleep 120
+          echo "✅ Wait complete"
+
+      - name: Close copilot-assigned security issues
+        env:
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          echo "🔍 Closing copilot-security-fix issues assigned to Copilot agent..."
+
+          # List all open issues with the copilot-security-fix label
+          ISSUES_JSON=$(gh issue list \
+            --repo "$REPO" \
+            --label "copilot-security-fix" \
+            --state open \
+            --json number,assignees 2>/dev/null || echo "[]")
+
+          if [ "$ISSUES_JSON" = "[]" ] || [ -z "$ISSUES_JSON" ]; then
+            echo "  ℹ️  No open copilot-security-fix issues found — nothing to do"
+            exit 0
+          fi
+
+          CLOSED_COUNT=0
+          SKIPPED_COUNT=0
+          while IFS= read -r issue; do
+            issue_num=$(echo "$issue" | jq -r '.number')
+            # Check if copilot-swe-agent is among the assignees
+            has_copilot=$(echo "$issue" | jq -r '[.assignees[].login] | any(test("copilot"; "i"))' 2>/dev/null || echo "false")
+
+            if [ "$has_copilot" = "true" ]; then
+              echo "  🔒 Closing issue #${issue_num} — copilot-swe-agent is assigned"
+              gh issue close "$issue_num" --repo "$REPO" \
+                --comment "✅ Closed automatically — issue was assigned to Copilot coding agent for resolution." 2>/dev/null || true
+              CLOSED_COUNT=$((CLOSED_COUNT + 1))
+            else
+              echo "  ⏭️  Skipping issue #${issue_num} — copilot-swe-agent not assigned"
+              SKIPPED_COUNT=$((SKIPPED_COUNT + 1))
+            fi
+          done < <(echo "$ISSUES_JSON" | jq -c '.[]')
+
+          echo ""
+          echo "📊 Closed $CLOSED_COUNT issue(s), skipped $SKIPPED_COUNT (not assigned to Copilot)"

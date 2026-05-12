@@ -1,0 +1,68 @@
+# Copilot Setup Steps
+# Configures the build environment and installs security skills
+# for GitHub Copilot cloud agent before it works on security issues.
+#
+# This workflow runs automatically before Copilot starts any coding task.
+# It installs the relevant security skill based on the issue label:
+#   - security-codeql-fix    → for CodeQL/SAST findings
+#   - security-vulnerability-fix → for Dependabot/dependency CVEs
+
+name: Copilot Setup Steps
+
+on: workflow_call
+
+jobs:
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Install security skills
+        env:
+          SKILLS_PAT: ${{ secrets.SECURITY_PAT }}
+        run: |
+          echo "Installing security skills from aa-security-agent-skills..."
+          git clone --depth 1 \
+            https://x-access-token:${SKILLS_PAT}@github.com/AAInternal/aa-security-agent-skills.git \
+            /tmp/aa-security-agent-skills
+
+          # Install both security skills — Copilot reads SKILL.md to decide which to use
+          /tmp/aa-security-agent-skills/install.sh \
+            security-codeql-fix \
+            security-vulnerability-fix
+
+          rm -rf /tmp/aa-security-agent-skills
+          echo "Skills installed successfully"
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+
+      - name: Setup Gradle wrapper
+        run: chmod +x gradlew
+
+      - name: Authenticate to private package registry
+        id: authenticate
+        uses: AAInternal/package-manager-auth@v0.0.11
+
+      - name: Configure Gradle credentials
+        env:
+          MAVEN_USERNAME: ${{ steps.authenticate.outputs.PACKAGE_REGISTRY_USER }}
+          MAVEN_PASSWORD: ${{ steps.authenticate.outputs.PACKAGE_REGISTRY_TOKEN }}
+        run: |
+          mkdir -p ~/.gradle
+          echo "mavenUsername=${MAVEN_USERNAME}" >> ~/.gradle/gradle.properties
+          echo "mavenPassword=${MAVEN_PASSWORD}" >> ~/.gradle/gradle.properties
+
+      - name: Download dependencies
+        run: ./gradlew dependencies --no-daemon

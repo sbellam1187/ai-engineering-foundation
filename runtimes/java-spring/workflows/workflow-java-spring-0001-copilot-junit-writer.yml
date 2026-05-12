@@ -1,0 +1,105 @@
+# Copilot JUnit Writer Workflow
+# Artifact: workflow-java-spring-0001-copilot-junit-writer
+#
+# Triggered when a PR is opened or updated. Detects Java source files in the PR
+# that lack corresponding JUnit test classes, creates a GitHub Issue with the
+# list of untested files, and assigns it to the copilot-swe-agent bot using
+# the @junit-writer agent.
+#
+# Features:
+#   - Scans PR diff for Java files under src/main/java/
+#   - Maps each source file to its expected test file under src/test/java/
+#   - Skips files that already have tests or where tests are added in the same PR
+#   - Creates one issue per PR listing all untested files
+#   - Auto-closes the issue after Copilot agent picks it up
+#
+# Related artifacts:
+#   - skill:    skill-java-spring-0003-java-unit-test-generator (runtimes/java-spring/skills/)
+#   - agent:    agent-java-spring-0001-junit-writer (runtimes/java-spring/agents/)
+#   - workflow:  workflow-quality-0001-copilot-sonar-fix (crosscutting/quality/workflows/)
+#   - ref:      workflow-security-0005-copilot-security-fix (crosscutting/security/workflows/)
+#
+# The main logic lives in scripts/junit-writer/copilot-junit-writer.sh to avoid
+# the 21,000-character expression limit in GitHub Actions.
+#
+# Authentication:
+#   Uses octo-sts ephemeral token for issue + PR APIs (replaces GITHUB_TOKEN).
+#   Uses DEPENDABOT_PAT secret for Copilot agent assignment via GraphQL.
+
+name: Copilot JUnit Writer
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    paths:
+      - 'src/main/java/**/*.java'
+
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to check for missing tests'
+        type: string
+        required: true
+      dry_run:
+        description: 'Dry run — report only, do not create issues'
+        type: boolean
+        required: false
+        default: false
+
+
+permissions:
+  contents: read               # Read repository contents (checkout, diff)
+  id-token: write              # Required for octo-sts OIDC token exchange
+  issues: write                # Create / reopen issues and assign to Copilot agent
+  pull-requests: write         # Read PR diff and comment on existing Copilot PRs
+
+jobs:
+  # ── Job 1: Detect missing tests and create issue for Copilot ──
+  check-missing-tests:
+    name: Check Missing JUnit Tests → Assign to Copilot
+    if: >-
+      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') &&
+      github.actor != 'copilot-swe-agent[bot]' &&
+      github.actor != 'dependabot[bot]' &&
+      github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    # Must exceed the script's sleep 120 (2 min) + git/API work + issue creation.
+    # 10 min gives safe headroom for large PRs.
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@d632683dd7b4114ad314bca15554477dd762a938 # v4.3.0
+        with:
+          fetch-depth: 0
+
+      - name: Get ephemeral token via octo-sts
+        id: octo-sts
+        uses: octo-sts/action@615d088645880b32000c2fbd6ca04377d4df9142 # v1
+        with:
+          scope: ${{ github.repository }}
+          identity: copilot-junit-writer
+          domain: octo-sts.cloud.aa.com
+
+      - name: Ensure required labels exist
+        env:
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+        run: |
+          for label in testing copilot-junit-writer; do
+            gh label create "$label" --color "0e8a16" --description "Auto-created by workflow-java-spring-0001-copilot-junit-writer" --force --repo "${{ github.repository }}" 2>/dev/null || true
+          done
+
+      - name: Detect missing tests and create issue
+        shell: bash
+        env:
+          REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ steps.octo-sts.outputs.token }}
+          DEPENDABOT_PAT: ${{ secrets.DEPENDABOT_PAT }}
+          PR_NUM: ${{ github.event.pull_request.number || github.event.inputs.pr_number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login || github.actor }}
+          PR_HEAD_REF: ${{ github.head_ref }}
+          PR_BASE_REF: ${{ github.base_ref || 'master' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run || 'false' }}
+        run: |
+          chmod +x scripts/junit-writer/copilot-junit-writer.sh
+          scripts/junit-writer/copilot-junit-writer.sh

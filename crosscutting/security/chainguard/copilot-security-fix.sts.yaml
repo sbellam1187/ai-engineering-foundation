@@ -1,0 +1,29 @@
+# octo-sts trust policy: copilot-security-fix
+#
+# Grants ephemeral tokens to workflows in this repo for:
+#   - issues:write              (assign copilot-swe-agent via GraphQL)
+#   - contents:read             (read repo files)
+#   - metadata:read             (required — read repo metadata)
+#   - vulnerability_alerts:read (fetch open Dependabot alerts via API)
+#
+# NOTE: vulnerability_alerts:read requires the octo-sts GitHub App to have
+#       "Dependabot alerts: Read" permission at the App level. If the App does
+#       not yet have this permission, request it from the octo-sts team:
+#       https://github.com/octo-sts/app/issues
+#
+# Used by:
+#   - .github/workflows/workflow-security-0005-copilot-security-fix.yml (workflow_dispatch)
+#   Source: crosscutting/security/workflows/workflow-security-0005-copilot-security-fix.yml
+#
+# Docs: https://developer.aa.com/docs/default/component/octo-sts
+
+issuer: https://token.actions.githubusercontent.com
+subject_pattern: "repo:AAInternal/aa-engineering-foundation:.*"
+
+permissions:
+  issues: write
+  contents: read
+  metadata: read
+  pull_requests: read
+  security_events: read
+  vulnerability_alerts: read

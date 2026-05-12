@@ -1,0 +1,63 @@
+name: AppSec AI Remediation Issue Creation
+on:
+  workflow_dispatch:
+    inputs:
+      employInfo:
+        description: aaId / email / squadName / cmdbAppShortName / customerDL
+        type: string
+        required: true
+      repoUrl:
+        description: Target repository URL
+        type: string
+        required: true
+      language:
+        description: Repo language / package ecosystem
+        type: string
+        required: true
+      prUrl:
+        description: URL of the raised PR
+        type: string
+        required: false
+
+permissions:
+  contents: read
+  id-token: write
+  security-events: write
+  issues: write
+
+jobs:
+  create_issue:
+    runs-on: sastappp69
+    env:
+      AAINTERNAL_READONLY_PAT: ${{ secrets.AAINTERNAL_READONLY_PAT }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install Python dependencies
+        run: pip3 install --user -r requirements.txt
+
+      - name: Generate JSON Payload
+        run: |
+          cat <<'EOF' > /tmp/issue_payload.json
+          {
+            "employInfo": "${{ inputs.employInfo }}",
+            "repoUrl": "${{ inputs.repoUrl }}",
+            "language": "${{ inputs.language }}",
+            "prUrl": "${{ inputs.prUrl }}"
+          }
+          EOF
+
+      - name: Run Issue Creation Script
+        run: python3 tools_issues/AppSecRemediation.py /tmp/issue_payload.json
+
+      - name: "Debug: Check file contents"
+        run: cat /tmp/github_issue_info
+
+      - name: Set Environment Variables from File
+        id: set_env_vars
+        run: |
+          source /tmp/github_issue_info
+          echo "ISSUE_URL=$ISSUE_URL" >> $GITHUB_ENV
+          echo "ISSUE_NUMBER=$ISSUE_NUMBER" >> $GITHUB_ENV

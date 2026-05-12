@@ -1,0 +1,22 @@
+# octo-sts trust policy: copilot-junit-writer
+#
+# Grants ephemeral tokens to workflows in this repo for:
+#   - issues:write              (create issues, assign copilot-swe-agent)
+#   - contents:read             (read repo files, checkout)
+#   - metadata:read             (required — read repo metadata)
+#   - pull_requests:write       (read PR diff, comment on existing Copilot PRs)
+#
+# Used by:
+#   - .github/workflows/workflow-java-spring-0001-copilot-junit-writer.yml
+#   Source: runtimes/java-spring/workflows/workflow-java-spring-0001-copilot-junit-writer.yml
+#
+# Docs: https://developer.aa.com/docs/default/component/octo-sts
+
+issuer: https://token.actions.githubusercontent.com
+subject_pattern: "repo:AAInternal/aa-engineering-foundation:.*"
+
+permissions:
+  issues: write
+  contents: read
+  metadata: read
+  pull_requests: write

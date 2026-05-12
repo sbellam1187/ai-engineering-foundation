@@ -1,0 +1,108 @@
+version: 1
+repo:
+  name: aa-engineering-laws
+  description: Enterprise engineering constitution and executable architecture specifications.
+  default_owner: enterprise-architecture
+artifact_types:
+- id: principle
+  path_segment: principles
+  filename_prefix: principle
+- id: pov
+  path_segment: povs
+  filename_prefix: pov
+- id: law
+  path_segment: laws
+  filename_prefix: law
+- id: adr
+  path_segment: adrs
+  filename_prefix: adr
+- id: adoption
+  path_segment: adoptions
+  filename_prefix: adoption
+- id: skill
+  path_segment: skills
+  filename_prefix: skill
+- id: ref
+  path_segment: references
+  filename_prefix: ref
+- id: agent
+  path_segment: agents
+  filename_prefix: agent
+naming:
+  numbering:
+    start: '0001'
+  global_rules:
+  - filenames-must-be-kebab-case
+  - no-spaces
+  - concern-required
+  - short-title-required
+  filename_patterns:
+    principle: ^principle-[a-z0-9-]+-[0-9]{4}-[a-z0-9-]+\\.md$
+    pov: ^pov-[a-z0-9-]+-[0-9]{4}-[a-z0-9-]+\\.md$
+    adr: ^adr-[a-z0-9-]+-[0-9]{4}-[a-z0-9-]+\\.md$
+    law: ^law-[a-z0-9-]+-[0-9]{3}-[a-z0-9-]+\\.md$
+    adoption: ^adoption-[a-z0-9-]+-[0-9]{3}-[a-z0-9-]+\\.md$
+    skill: ^skill-[a-z0-9-]+-[0-9]{4}-[a-z0-9-]+\\.md$
+    ref: ^ref-[a-z0-9-]+-[0-9]{4}-[a-z0-9-]+\\.md$
+    agent: ^agent-[a-z0-9-]+-[0-9]{4}-[a-z0-9-]+\\.md$
+  id_patterns:
+    principle: ^principle-[a-z0-9-]+-[0-9]{4}-[a-z0-9-]+$
+    pov: ^pov-[a-z0-9-]+-[0-9]{4}-[a-z0-9-]+$
+    adr: ^ADR-[a-z0-9-]+-[0-9]{4}-[a-z0-9-]+$
+    law: ^LAW-[a-z0-9-]+-[0-9]{4}-[a-z0-9-]+$
+    adoption: ^ADOPTION-[a-z0-9-]+-[0-9]{4}-[a-z0-9-]+$
+    skill: ^SKILL-[a-z0-9-]+-[0-9]{4}-[a-z0-9-]+$
+    ref: ^REF-[a-z0-9-]+-[0-9]{4}-[a-z0-9-]+$
+    agent: ^AGENT-[a-z0-9-]+-[0-9]{4}-[a-z0-9-]+$
+    ref: ^REF-[a-z0-9-]+-[0-9]{4}-[a-z0-9-]+$
+taxonomy_roots:
+- enterprise
+- platforms
+- runtimes
+- crosscutting
+concerns:
+  platforms:
+  - id: ai
+    path: platforms/ai
+  - id: cloud
+    path: platforms/cloud
+  - id: runtime
+    path: platforms/runtime
+    subconcerns:
+    - id: kubernetes
+      path: platforms/runtime/kubernetes
+  - id: integration
+    path: platforms/integration
+    subconcerns:
+    - id: kafka
+      path: platforms/integration/kafka
+    - id: streaming
+      path: platforms/integration/streaming
+  - id: telemetry
+    path: platforms/telemetry
+  - id: data
+    path: platforms/data
+    subconcerns:
+    - id: postgres
+      path: platforms/data/postgres
+    - id: mongodb
+      path: platforms/data/mongodb
+    - id: lakehouse
+      path: platforms/data/lakehouse
+  runtimes:
+  - id: java-spring
+    path: runtimes/java-spring
+  - id: dotnet
+    path: runtimes/dotnet
+  crosscutting:
+  - id: security
+    path: crosscutting/security
+  - id: quality
+    path: crosscutting/quality
+  - id: resiliency
+    path: crosscutting/resiliency
+  - id: devops
+    path: crosscutting/devops
+  enterprise:
+  - id: enterprise
+    path: enterprise
