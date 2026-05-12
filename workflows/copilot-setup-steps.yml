@@ -1,0 +1,100 @@
+name: "Copilot Setup Steps"
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+  pull_request:
+    paths:
+      - .github/workflows/copilot-setup-steps.yml
+
+jobs:
+  # Job name MUST be exactly 'copilot-setup-steps'
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install security skills
+        env:
+          SKILLS_PAT: ${{ secrets.SECURITY_PAT }}
+        run: |
+          # Diagnostic: verify PAT is set and can read the skills repo
+          if [ -z "$SKILLS_PAT" ]; then
+            echo "::error::SECURITY_PAT secret is empty"
+            exit 1
+          fi
+          echo "PAT length: ${#SKILLS_PAT}"
+          HTTP_CODE=$(curl -s -o /tmp/api.json -w "%{http_code}" \
+            -H "Authorization: Bearer $SKILLS_PAT" \
+            -H "Accept: application/vnd.github+json" \
+            https://api.github.com/repos/AAInternal/aa-security-agent-skills)
+          echo "API probe status: $HTTP_CODE"
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "::error::PAT cannot access skills repo (HTTP $HTTP_CODE)"
+            jq -r '.message // empty' /tmp/api.json || cat /tmp/api.json
+            exit 1
+          fi
+          git clone --depth 1 \
+            https://x-access-token:${SKILLS_PAT}@github.com/AAInternal/aa-security-agent-skills.git \
+            /tmp/aa-security-agent-skills \
+            && bash /tmp/aa-security-agent-skills/install.sh \
+                security-codeql-fix \
+                security-vulnerability-fix \
+            && rm -rf /tmp/aa-security-agent-skills
+
+      - name: Set up Java 21
+        if: hashFiles('gradlew', 'pom.xml', 'build.gradle') != ''
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+          cache: 'gradle'
+
+      - name: Setup Gradle wrapper
+        if: hashFiles('gradlew') != ''
+        run: chmod +x gradlew
+
+      - name: Set up Node.js
+        if: hashFiles('package.json') != ''
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Node.js dependencies
+        if: hashFiles('package-lock.json') != ''
+        run: npm ci
+
+      - name: Set up Python
+        if: hashFiles('requirements.txt', 'pyproject.toml') != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python dependencies
+        if: hashFiles('requirements.txt') != ''
+        run: pip install -r requirements.txt
+
+      - name: Set up Go
+        if: hashFiles('go.mod') != ''
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+
+      - name: Set up .NET
+        if: hashFiles('**/*.csproj') != ''
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.x'
+
+      - name: Set up Ruby
+        if: hashFiles('Gemfile') != ''
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.3'
+          bundler-cache: true
